@@ -36,15 +36,25 @@ class ContentViewModel: ObservableObject {
     @Published var error: Error?
     @Published var frame: CGImage?
     
-//    var comicFilter = false
-//    var monoFilter = false
-//    var crystalFilter = false
-    var isRecoding = false
-    
+    var isRecoding = false {
+        didSet {
+            if isRecoding {
+                RecordSession.current.newSession()
+                DataRecorder.sharedRgbRecorder.startRecording()
+                DataRecorder.sharedDepthRecorder.startRecording()
+            } else {
+                DataRecorder.sharedRgbRecorder.finishRecording { url in
+//                    print(url)
+                }
+                DataRecorder.sharedDepthRecorder.finishRecording(success: { url in
+                    
+                })
+                RecordSession.current.endSession()
+            }
+        }
+    }
+        
     private let context = CIContext()
-    
-    private let cameraManager = CameraManager.shared
-    private let frameManager = FrameManager.shared
     
     init() {
         setupSubscriptions()
@@ -52,38 +62,42 @@ class ContentViewModel: ObservableObject {
     
     func setupSubscriptions() {
         // swiftlint:disable:next array_init
-        cameraManager.$error
+        CameraManager.shared.$error
             .receive(on: RunLoop.main)
             .map { $0 }
             .assign(to: &$error)
         
-        frameManager.$currentCIImage
+        FrameManager.shared.$currentDataWrapper
             .receive(on: RunLoop.main)
-            .compactMap { ciImage in
-                guard let image = ciImage else { return nil }
+            .compactMap { dataWrapper in
+                guard let depthCIImage = dataWrapper?.currentDepthCIImage, let depthCGImage = self.context.createCGImage(depthCIImage, from: depthCIImage.extent) else { return nil }
+                guard let videoCIImage = dataWrapper?.currentVideoCIImage, let videoCGImage = self.context.createCGImage(videoCIImage, from: videoCIImage.extent) else { return nil }
+                if DataRecorder.sharedRgbRecorder.isReadyForWriting, DataRecorder.sharedDepthRecorder.isReadyForWriting {
+                    let _ = DataRecorder.sharedRgbRecorder.writeImageToVideo(ciImage: videoCIImage, cgImage: videoCGImage)
+                    let _ = DataRecorder.sharedDepthRecorder.writeImageToVideo(ciImage: depthCIImage, cgImage: depthCGImage)
+                }
                 
-                return self.context.createCGImage(image, from: image.extent)
+                return videoCGImage // Preview videoCGImage
+                // TODO: add metal API to overlay depth on video
             }
             .assign(to: &$frame)
-        
-//        frameManager.$current
-//            .receive(on: RunLoop.main)
-//            .compactMap { buffer in
-//                guard let image = CGImage.create(from: buffer) else {
-//                    return nil
-//                }
-//
-//                let ciImage = CIImage(cgImage: image)
-//
-////                if self.isRecoding {
-////                    self.frameManager.startRecording()
-//////                    ciImage = ciImage.applyingFilter("CIPhotoEffectNoir")
-////                } else {
-//////                    self.frameManager.stopRecording()
-////                }
-//
-//                return self.context.createCGImage(ciImage, from: ciImage.extent)
-//            }
-//            .assign(to: &$frame)
     }
+//
+//    func startRecording() {
+//        do {
+//            try DataRecorder.shared.startRecording()
+//        } catch {
+//
+//        }
+//    }
+//
+//    func stopRecording() {
+//        do {
+//            try DataRecorder.shared.finishRecording { fileURL in
+////                print(fileURL)
+//            }
+//        } catch {
+//
+//        }
+//    }
 }

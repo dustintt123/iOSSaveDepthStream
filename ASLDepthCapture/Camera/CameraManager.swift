@@ -102,15 +102,17 @@ class CameraManager: ObservableObject {
         
         let device: AVCaptureDevice? = AVCaptureDevice.DiscoverySession(deviceTypes: [.builtInTrueDepthCamera], mediaType: .video, position: .front).devices.first
         
-//        let device = AVCaptureDevice.default(
-//            .builtInWideAngleCamera,
-//            for: .video,
-//            position: .front)
-        
         guard let camera = device else {
             set(error: .cameraUnavailable)
             status = .failed
             return
+        }
+        
+        print("Camera Specs for \(camera)")
+        print("FrameRate: \(camera.activeFormat.videoSupportedFrameRateRanges)")
+        print("FoV: \(camera.activeFormat.videoFieldOfView)")
+        if #available(iOS 16.0, *) {
+            print("Dimensions: \(camera.activeFormat.supportedMaxPhotoDimensions)")
         }
         
         do {
@@ -165,8 +167,6 @@ class CameraManager: ObservableObject {
         let selectedFormat = filtered.max(by: {
             first, second in CMVideoFormatDescriptionGetDimensions(first.formatDescription).width < CMVideoFormatDescriptionGetDimensions(second.formatDescription).width
         })
-        
-        
         
 //        let availableFormats = camera.activeFormat.supportedDepthDataFormats
 //

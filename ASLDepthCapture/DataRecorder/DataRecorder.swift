@@ -10,73 +10,73 @@ import Foundation
 import Compression
 import CoreImage
 
+enum VideoDataType {
+    case depth, rgb
+    func toString() -> String {
+        switch self {
+        case .depth:
+            return "Depth"
+        case .rgb:
+            return "RGB"
+        }
+    }
+}
+
 
 class DataRecorder {
-//    private var videoOutputURL: URL?
-    private var outputSize = CGSizeMake(1280, 720)
+    static let sharedRgbRecorder = DataRecorder(dataType: .rgb, queue: DispatchQueue(label: "writingRGBPixels", qos: .userInteractive))
+    static let sharedDepthRecorder = DataRecorder(dataType: .depth, queue: DispatchQueue(label: "writingDepthPixels", qos: .userInteractive))
+    
+    var dataType: VideoDataType
+    
+    private var outputSize = CGSizeMake(1080, 1920)
+//    private var outputSize = CGSizeMake(640, 480)
     
     private var videoWriter: AVAssetWriter?
     private var videoWriterInput: AVAssetWriterInput?
     private var pixelBufferAdaptor: AVAssetWriterInputPixelBufferAdaptor?
+
+    var isReadyForWriting = false
     
     private var frameCount: Int64 = 0
-    private var fps: Int32 = 1
+    private var fps: Int32 = 30
     lazy private var frameDuration = CMTimeMake(value: 1, timescale: fps) //timescale is frame per second
     
     // All operations writing the video are done on the porcessingQ so they will happen sequentially
-    var processingQ = DispatchQueue(label: "writingPixels",
-                                    qos: .userInteractive)
+    var processingQ: DispatchQueue
     
-    let kErrorDomain = "DepthCapture"
-    let maxNumberOfFrame = 25
-    lazy var bufferSize = 640 * 480 * 2 * maxNumberOfFrame  // maxNumberOfFrame frames
-    var dstBuffer: UnsafeMutablePointer<UInt8>?
+//    let kErrorDomain = "DepthCapture"
+//    let maxNumberOfFrame = 25
+//    lazy var bufferSize = 640 * 480 * 2 * maxNumberOfFrame  // maxNumberOfFrame frames
+//    var dstBuffer: UnsafeMutablePointer<UInt8>?
+//
+//    var compresserPtr: UnsafeMutablePointer<compression_stream>?
+//    var file: FileHandle?
     
-    var compresserPtr: UnsafeMutablePointer<compression_stream>?
-    var file: FileHandle?
-    
-    
-    
-    init() {
-        subscribeToVideoFeed()
+    init(dataType: VideoDataType, queue: DispatchQueue) {
+        self.dataType = dataType
+        self.processingQ = queue
     }
     
     func reset() {
         frameCount = 0
 //        videoOutputURL = nil
-        if self.compresserPtr != nil {
-            //free(compresserPtr!.pointee.dst_ptr)
-            compression_stream_destroy(self.compresserPtr!)
-            self.compresserPtr = nil
-        }
-        if self.file != nil {
-            self.file!.closeFile()
-            self.file = nil
-        }
+//        if self.compresserPtr != nil {
+//            compression_stream_destroy(self.compresserPtr!)
+//            self.compresserPtr = nil
+//        }
+//        if self.file != nil {
+//            self.file!.closeFile()
+//            self.file = nil
+//        }
     }
     
-    func subscribeToVideoFeed() {
-//        frameManager.$current
-//            .receive(on: RunLoop.main)
-//            .compactMap { buffer in
-//                guard let image = CGImage.create(from: buffer) else {
-//                    return nil
-//                }
-//
-//                var ciImage = CIImage(cgImage: image)
-//
-//                writeImageToVideo(ciImage: ciImage)
-//            }
-
-    }
-    
-    func writeImageToVideo(ciImage: CIImage) -> Bool {
-        guard let videoWriterInput = videoWriterInput, let pixelBufferAdaptor = pixelBufferAdaptor, let cgImage = ciImage.cgImage else { return false }
+    func writeImageToVideo(ciImage: CIImage, cgImage: CGImage) -> Bool {
+        guard let videoWriterInput = videoWriterInput, let pixelBufferAdaptor = pixelBufferAdaptor else { return false }
         
         var appendSucceeded = true
-        videoWriterInput.requestMediaDataWhenReady(on: processingQ, using: { () -> Void in
-            
-            
+                
+        processingQ.sync {
             if (videoWriterInput.isReadyForMoreMediaData) {
 //                    let nextPhoto = self.choosenPhotos.remove(at: 0)
                 let lastFrameTime = CMTimeMake(value: self.frameCount, timescale: self.fps)
@@ -116,7 +116,7 @@ class DataRecorder {
                 }
             }
             self.frameCount += 1
-        })
+        }
         return appendSucceeded
     }
     
@@ -127,7 +127,8 @@ class DataRecorder {
             fatalError("documentDir Error")
         }
         
-        let videoOutputURL = documentDirectory.appendingPathComponent("OutputVideo.mp4")
+        let sessionTimestamp = RecordSession.current.timestamp ?? "TimestampError"
+        let videoOutputURL = documentDirectory.appendingPathComponent("\(sessionTimestamp)-\(self.dataType.toString()).mp4")
         
         if fileManager.fileExists(atPath: videoOutputURL.path) {
             do {
@@ -144,7 +145,6 @@ class DataRecorder {
         reset()
         
         let videoOutputURL = fileOutputPath()
-        
         if let videoWriter = try? AVAssetWriter(outputURL: videoOutputURL, fileType: AVFileType.mp4) {
             self.videoWriter = videoWriter
         } else {
@@ -163,6 +163,7 @@ class DataRecorder {
         
         videoWriterInput = AVAssetWriterInput(mediaType: AVMediaType.video, outputSettings: outputSettings)
         let videoWriterInput = videoWriterInput!
+        videoWriterInput.expectsMediaDataInRealTime = true
         let sourcePixelBufferAttributesDictionary = [kCVPixelBufferPixelFormatTypeKey as String : NSNumber(value: kCVPixelFormatType_32ARGB), kCVPixelBufferWidthKey as String: NSNumber(value: Float(outputSize.width)), kCVPixelBufferHeightKey as String: NSNumber(value: Float(outputSize.height))]
         pixelBufferAdaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: videoWriterInput, sourcePixelBufferAttributes: sourcePixelBufferAttributesDictionary)
         let pixelBufferAdaptor = pixelBufferAdaptor!
@@ -174,18 +175,21 @@ class DataRecorder {
         if videoWriter.startWriting() {
             videoWriter.startSession(atSourceTime: CMTime.zero)
             assert(pixelBufferAdaptor.pixelBufferPool != nil)
+            isReadyForWriting = true
         } else {
-            
+            fatalError("video writer cannot start writing")
         }
     }
     
-    func startRecording() throws {
+    func startRecording() {
         processingQ.async {
             self.prepareForRecording()
         }
     }
     
-    func finishRecording(success: @escaping ((URL?) -> Void)) throws {
+    func finishRecording(success: @escaping ((URL?) -> Void)) {
+        isReadyForWriting = false
+        
         processingQ.async { [self] in
             videoWriterInput?.markAsFinished()
             videoWriter?.finishWriting { () -> Void in
@@ -300,5 +304,55 @@ class DataRecorder {
 //    }
 //
 //
+    
+//    func writeImageToVideo(ciImage: CIImage, cgImage: CGImage) -> Bool {
+//        guard let videoWriterInput = videoWriterInput, let pixelBufferAdaptor = pixelBufferAdaptor else { return false }
+//
+//        var appendSucceeded = true
+//
+//        videoWriterInput.requestMediaDataWhenReady(on: processingQ, using: { () -> Void in
+//
+//            if (videoWriterInput.isReadyForMoreMediaData) {
+////                    let nextPhoto = self.choosenPhotos.remove(at: 0)
+//                let lastFrameTime = CMTimeMake(value: self.frameCount, timescale: self.fps)
+//                let presentationTime = self.frameCount == 0 ? lastFrameTime : CMTimeAdd(lastFrameTime, self.frameDuration)
+//
+//                var pixelBuffer: CVPixelBuffer? = nil
+//                let status: CVReturn = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pixelBufferAdaptor.pixelBufferPool!, &pixelBuffer)
+//
+//                if let pixelBuffer = pixelBuffer, status == 0 {
+//                    let managedPixelBuffer = pixelBuffer
+//
+//                    CVPixelBufferLockBaseAddress(managedPixelBuffer, [])
+//
+//                    let data = CVPixelBufferGetBaseAddress(managedPixelBuffer)
+//                    let rgbColorSpace = CGColorSpaceCreateDeviceRGB()
+//                    let context = CGContext(data: data, width: Int(self.outputSize.width), height: Int(self.outputSize.height), bitsPerComponent: 8, bytesPerRow: CVPixelBufferGetBytesPerRow(managedPixelBuffer), space: rgbColorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue)
+//
+//                    context?.clear(CGRect(x: 0, y: 0, width: self.outputSize.width, height: self.outputSize.height))
+//                    let horizontalRatio = CGFloat(self.outputSize.width) / ciImage.extent.size.width
+//                    let verticalRatio = CGFloat(self.outputSize.height) / ciImage.extent.size.height
+//                    //aspectRatio = max(horizontalRatio, verticalRatio) // ScaleAspectFill
+//                    let aspectRatio = min(horizontalRatio, verticalRatio) // ScaleAspectFit
+//
+//                    let newSize:CGSize = CGSizeMake(ciImage.extent.size.width * aspectRatio, ciImage.extent.size.height * aspectRatio)
+//
+//                    let x = newSize.width < self.outputSize.width ? (self.outputSize.width - newSize.width) / 2 : 0
+//                    let y = newSize.height < self.outputSize.height ? (self.outputSize.height - newSize.height) / 2 : 0
+//
+//                    context?.draw(cgImage, in: CGRect(x: x, y: y, width: newSize.width, height: newSize.height))
+//
+//                    CVPixelBufferUnlockBaseAddress(managedPixelBuffer, [])
+//
+//                    appendSucceeded = pixelBufferAdaptor.append(pixelBuffer, withPresentationTime: presentationTime)
+//                } else {
+//                    print("Failed to allocate pixel buffer")
+//                    appendSucceeded = false
+//                }
+//            }
+//            self.frameCount += 1
+//        })
+//        return appendSucceeded
+//    }
 
 }

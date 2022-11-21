@@ -33,12 +33,18 @@
 import AVFoundation
 import CoreImage
 
+struct RGBDDataWrapper {
+    var currentDepthCIImage: CIImage?
+    var currentVideoCIImage: CIImage?
+}
+
 class FrameManager: NSObject, ObservableObject {
     static let shared = FrameManager()
     
-    @Published var current: CVPixelBuffer?
-    @Published var currentCIImage: CIImage?
-    
+    @Published var currentDataWrapper: RGBDDataWrapper?
+    @Published var currentDepthCIImage: CIImage?
+    @Published var currentVideoCIImage: CIImage?
+        
     let videoOutputQueue = DispatchQueue(
         label: "com.raywenderlich.VideoOutputQ",
         qos: .userInitiated,
@@ -46,31 +52,11 @@ class FrameManager: NSObject, ObservableObject {
         autoreleaseFrequency: .workItem)
     
 //    let depthRecorder = DepthCapture()
-    let dataRecorder = DataRecorder()
     
     private override init() {
         super.init()
         
         CameraManager.shared.set(self, queue: videoOutputQueue)
-        dataRecorder.prepareForRecording()
-    }
-    
-    func startRecording() {
-        do {
-            try dataRecorder.startRecording()
-        } catch {
-            
-        }
-    }
-    
-    func stopRecording() {
-        do {
-            try dataRecorder.finishRecording { fileURL in
-                print(fileURL)
-            }
-        } catch {
-            
-        }
     }
 }
 
@@ -90,42 +76,24 @@ extension FrameManager: AVCaptureDataOutputSynchronizerDelegate {
             return
         }
         
-        var depthData = syncedDepthData.depthData
-        
         // https://www.kodeco.com/8246240-image-depth-maps-tutorial-for-ios-getting-started#toc-anchor-002
-        if depthData.depthDataType != kCVPixelFormatType_DisparityFloat32 {
-          depthData = depthData.converting(
-            toDepthDataType: kCVPixelFormatType_DisparityFloat32
-          )
-        }
-        
-        let pixelBuffer = depthData.applyingExifOrientation(.right).depthDataMap
-        pixelBuffer.clamp()
-        let depthMap = CIImage(cvPixelBuffer: pixelBuffer)
-        
-        DispatchQueue.main.async { [weak self] in
-            self?.currentCIImage = depthMap
-        }
-//        
-//        let depthPixelBuffer = depthData.depthDataMap
-        // 7
-//        return depthData.applyingExifOrientation(orientation).depthDataMap
-        
-        
-//        let sampleBuffer = syncedVideoData.sampleBuffer
-//
-//        if let buffer = sampleBuffer.imageBuffer {
-//            DispatchQueue.main.async {
-//                self.current = buffer
-////                self.current = depthPixelBuffer
-//            }
+//        if depthData.depthDataType != kCVPixelFormatType_DisparityFloat32 {
+//          depthData = depthData.converting(
+//            toDepthDataType: kCVPixelFormatType_DisparityFloat32
+//          )
 //        }
         
+        guard let videoSampleBuffer = syncedVideoData.sampleBuffer.imageBuffer else { return }
+        let videoImage = CIImage(cvImageBuffer: videoSampleBuffer)
         
-        //        guard let videoPixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer),
-        //            let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer) else {
-        //                return
-        //        }
+        let depthPixelBuffer = syncedDepthData.depthData.applyingExifOrientation(.right).depthDataMap
+        let depthMap = CIImage(cvPixelBuffer: depthPixelBuffer)
+        
+        DispatchQueue.main.async { [weak self] in
+            self?.currentDataWrapper = RGBDDataWrapper(currentDepthCIImage: depthMap, currentVideoCIImage: videoImage)
+            self?.currentDepthCIImage = depthMap
+            self?.currentVideoCIImage = videoImage
+        }
         
     }
     
