@@ -11,11 +11,13 @@ import Compression
 import CoreImage
 
 enum VideoDataType {
-    case depth, rgb
+    case depth, rgb, rawDepth
     func toString() -> String {
         switch self {
         case .depth:
             return "Depth"
+        case .rawDepth:
+            return "RawDepth"
         case .rgb:
             return "RGB"
         }
@@ -26,6 +28,7 @@ enum VideoDataType {
 class DataRecorder {
     static let sharedRgbRecorder = DataRecorder(dataType: .rgb, queue: DispatchQueue(label: "writingRGBPixels", qos: .userInteractive))
     static let sharedDepthRecorder = DataRecorder(dataType: .depth, queue: DispatchQueue(label: "writingDepthPixels", qos: .userInteractive))
+    static let sharedRawDepthRecorder = DataRecorder(dataType: .rawDepth, queue: DispatchQueue(label: "writingRawDepthPixels", qos: .userInteractive))
     
     var dataType: VideoDataType
     
@@ -44,6 +47,7 @@ class DataRecorder {
     
     // All operations writing the video are done on the porcessingQ so they will happen sequentially
     var processingQ: DispatchQueue
+    var file: FileHandle?
     
 //    let kErrorDomain = "DepthCapture"
 //    let maxNumberOfFrame = 25
@@ -56,6 +60,95 @@ class DataRecorder {
     init(dataType: VideoDataType, queue: DispatchQueue) {
         self.dataType = dataType
         self.processingQ = queue
+    }
+    
+    func fileOutputPath() -> URL {
+        let fileManager = FileManager.default
+        let urls = fileManager.urls(for: .documentDirectory, in: .userDomainMask)
+        guard let documentDirectory: URL = urls.first else {
+            fatalError("documentDir Error")
+        }
+        
+        let sessionTimestamp = RecordSession.current.timestamp ?? "TimestampError"
+        let videoOutputURL = documentDirectory.appendingPathComponent("\(sessionTimestamp)-\(self.dataType.toString()).mp4")
+        
+        if fileManager.fileExists(atPath: videoOutputURL.path) {
+            do {
+                try FileManager.default.removeItem(atPath: videoOutputURL.path)
+            } catch {
+                fatalError("Unable to delete file: \(error) : \(#function).")
+            }
+        }
+        
+        return videoOutputURL
+    }
+    
+    func prepareForRecording() {
+        reset()
+        
+        let videoOutputURL = fileOutputPath()
+        self.file = FileHandle(forUpdatingAtPath: videoOutputURL.path)
+        
+        if let videoWriter = try? AVAssetWriter(outputURL: videoOutputURL, fileType: AVFileType.mp4) {
+            self.videoWriter = videoWriter
+        } else {
+            fatalError("AVAssetWriter error")
+        }
+        
+        guard let videoWriter = self.videoWriter else {
+            fatalError("Video writer not found")
+        }
+        
+        let outputSettings = [AVVideoCodecKey : AVVideoCodecType.h264, AVVideoWidthKey : NSNumber(value: Float(outputSize.width)), AVVideoHeightKey : NSNumber(value: Float(outputSize.height))] as [String : Any]
+        
+        guard videoWriter.canApply(outputSettings: outputSettings, forMediaType: AVMediaType.video) == true else {
+            fatalError("Negative : Can't apply the Output settings...")
+        }
+        
+        videoWriterInput = AVAssetWriterInput(mediaType: AVMediaType.video, outputSettings: outputSettings)
+        let videoWriterInput = videoWriterInput!
+        videoWriterInput.expectsMediaDataInRealTime = true
+        let sourcePixelBufferAttributesDictionary = [kCVPixelBufferPixelFormatTypeKey as String : NSNumber(value: kCVPixelFormatType_32ARGB), kCVPixelBufferWidthKey as String: NSNumber(value: Float(outputSize.width)), kCVPixelBufferHeightKey as String: NSNumber(value: Float(outputSize.height))]
+        pixelBufferAdaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: videoWriterInput, sourcePixelBufferAttributes: sourcePixelBufferAttributesDictionary)
+        let pixelBufferAdaptor = pixelBufferAdaptor!
+        
+        if videoWriter.canAdd(videoWriterInput) {
+            videoWriter.add(videoWriterInput)
+        }
+        
+        if videoWriter.startWriting() {
+            videoWriter.startSession(atSourceTime: CMTime.zero)
+            assert(pixelBufferAdaptor.pixelBufferPool != nil)
+            isReadyForWriting = true
+        } else {
+            fatalError("video writer cannot start writing")
+        }
+    }
+    
+    func startRecording() {
+        processingQ.async {
+            self.prepareForRecording()
+        }
+    }
+    
+    func finishRecording(success: @escaping ((URL?) -> Void)) {
+        isReadyForWriting = false
+        do {
+            try file?.close() }
+        catch {
+            
+        }
+        processingQ.async { [self] in
+            videoWriterInput?.markAsFinished()
+            videoWriter?.finishWriting { () -> Void in
+                print("FINISHED!!!!!")
+            }
+            
+            DispatchQueue.main.sync {
+//                success(self.videoOutputURL)
+            }
+            self.reset()
+        }
     }
     
     func reset() {
@@ -120,87 +213,36 @@ class DataRecorder {
         return appendSucceeded
     }
     
-    func fileOutputPath() -> URL {
-        let fileManager = FileManager.default
-        let urls = fileManager.urls(for: .documentDirectory, in: .userDomainMask)
-        guard let documentDirectory: URL = urls.first else {
-            fatalError("documentDir Error")
+    func writeRawDepthToFile(pixelBuffer: CVPixelBuffer) -> Bool {
+//        guard let videoWriterInput = videoWriterInput, let pixelBufferAdaptor = pixelBufferAdaptor else { return false }
+        
+        var appendSucceeded = true
+        
+        processingQ.sync {
+            let data = Data(bytes: pixelBuffer.pointer, count: pixelBuffer.size)
+            file?.write(data)
+            return appendSucceeded
         }
-        
-        let sessionTimestamp = RecordSession.current.timestamp ?? "TimestampError"
-        let videoOutputURL = documentDirectory.appendingPathComponent("\(sessionTimestamp)-\(self.dataType.toString()).mp4")
-        
-        if fileManager.fileExists(atPath: videoOutputURL.path) {
-            do {
-                try FileManager.default.removeItem(atPath: videoOutputURL.path)
-            } catch {
-                fatalError("Unable to delete file: \(error) : \(#function).")
-            }
-        }
-        
-        return videoOutputURL
-    }
-    
-    func prepareForRecording() {
-        reset()
-        
-        let videoOutputURL = fileOutputPath()
-        if let videoWriter = try? AVAssetWriter(outputURL: videoOutputURL, fileType: AVFileType.mp4) {
-            self.videoWriter = videoWriter
-        } else {
-            fatalError("AVAssetWriter error")
-        }
-        
-        guard let videoWriter = self.videoWriter else {
-            fatalError("Video writer not found")
-        }
-        
-        let outputSettings = [AVVideoCodecKey : AVVideoCodecType.h264, AVVideoWidthKey : NSNumber(value: Float(outputSize.width)), AVVideoHeightKey : NSNumber(value: Float(outputSize.height))] as [String : Any]
-        
-        guard videoWriter.canApply(outputSettings: outputSettings, forMediaType: AVMediaType.video) == true else {
-            fatalError("Negative : Can't apply the Output settings...")
-        }
-        
-        videoWriterInput = AVAssetWriterInput(mediaType: AVMediaType.video, outputSettings: outputSettings)
-        let videoWriterInput = videoWriterInput!
-        videoWriterInput.expectsMediaDataInRealTime = true
-        let sourcePixelBufferAttributesDictionary = [kCVPixelBufferPixelFormatTypeKey as String : NSNumber(value: kCVPixelFormatType_32ARGB), kCVPixelBufferWidthKey as String: NSNumber(value: Float(outputSize.width)), kCVPixelBufferHeightKey as String: NSNumber(value: Float(outputSize.height))]
-        pixelBufferAdaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: videoWriterInput, sourcePixelBufferAttributes: sourcePixelBufferAttributesDictionary)
-        let pixelBufferAdaptor = pixelBufferAdaptor!
-        
-        if videoWriter.canAdd(videoWriterInput) {
-            videoWriter.add(videoWriterInput)
-        }
-        
-        if videoWriter.startWriting() {
-            videoWriter.startSession(atSourceTime: CMTime.zero)
-            assert(pixelBufferAdaptor.pixelBufferPool != nil)
-            isReadyForWriting = true
-        } else {
-            fatalError("video writer cannot start writing")
-        }
-    }
-    
-    func startRecording() {
-        processingQ.async {
-            self.prepareForRecording()
-        }
-    }
-    
-    func finishRecording(success: @escaping ((URL?) -> Void)) {
-        isReadyForWriting = false
-        
-        processingQ.async { [self] in
-            videoWriterInput?.markAsFinished()
-            videoWriter?.finishWriting { () -> Void in
-                print("FINISHED!!!!!")
-            }
-            
-            DispatchQueue.main.sync {
-//                success(self.videoOutputURL)
-            }
-            self.reset()
-        }
+//        processingQ.sync {
+//            if (videoWriterInput.isReadyForMoreMediaData) {
+////                    let nextPhoto = self.choosenPhotos.remove(at: 0)
+//                let lastFrameTime = CMTimeMake(value: self.frameCount, timescale: self.fps)
+//                let presentationTime = self.frameCount == 0 ? lastFrameTime : CMTimeAdd(lastFrameTime, self.frameDuration)
+//
+//                var pixelBuffer: CVPixelBuffer? = pixelBuffer
+//                let status: CVReturn = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pixelBufferAdaptor.pixelBufferPool!, &pixelBuffer)
+//
+//                if let pixelBuffer = pixelBuffer, status == 0 {
+//                    appendSucceeded = pixelBufferAdaptor.append(pixelBuffer, withPresentationTime: presentationTime)
+//                } else {
+//                    print("Failed to allocate pixel buffer")
+//                    appendSucceeded = false
+//                }
+//
+//            }
+//            self.frameCount += 1
+//        }
+        return appendSucceeded
     }
     
 //    func addPixelBuffers(pixelBuffer: CVPixelBuffer) {

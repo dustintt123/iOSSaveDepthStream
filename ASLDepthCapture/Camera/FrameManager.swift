@@ -1,41 +1,16 @@
-/// Copyright (c) 2021 Razeware LLC
-/// 
-/// Permission is hereby granted, free of charge, to any person obtaining a copy
-/// of this software and associated documentation files (the "Software"), to deal
-/// in the Software without restriction, including without limitation the rights
-/// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-/// copies of the Software, and to permit persons to whom the Software is
-/// furnished to do so, subject to the following conditions:
-/// 
-/// The above copyright notice and this permission notice shall be included in
-/// all copies or substantial portions of the Software.
-/// 
-/// Notwithstanding the foregoing, you may not use, copy, modify, merge, publish,
-/// distribute, sublicense, create a derivative work, and/or sell copies of the
-/// Software in any work that is designed, intended, or marketed for pedagogical or
-/// instructional purposes related to programming, coding, application development,
-/// or information technology.  Permission for such use, copying, modification,
-/// merger, publication, distribution, sublicensing, creation of derivative works,
-/// or sale is expressly withheld.
-/// 
-/// This project and source code may use libraries or frameworks that are
-/// released under various Open-Source licenses. Use of those libraries and
-/// frameworks are governed by their own individual licenses.
-///
-/// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-/// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-/// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-/// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-/// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-/// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-/// THE SOFTWARE.
+//
+//  FrameManager.swift
+//  ASLDepthCapture
+//
+//  Created by Ting Yu.
+//
 
 import AVFoundation
 import CoreImage
 
 struct RGBDDataWrapper {
-    var currentDepthCIImage: CIImage?
-    var currentVideoCIImage: CIImage?
+    var currentDepthPixelBuffer: CVPixelBuffer?
+    var currentVideoPixelBuffer: CVPixelBuffer?
 }
 
 class FrameManager: NSObject, ObservableObject {
@@ -44,14 +19,14 @@ class FrameManager: NSObject, ObservableObject {
     @Published var currentDataWrapper: RGBDDataWrapper?
     @Published var currentDepthCIImage: CIImage?
     @Published var currentVideoCIImage: CIImage?
-        
+    
     let videoOutputQueue = DispatchQueue(
         label: "com.raywenderlich.VideoOutputQ",
         qos: .userInitiated,
         attributes: [],
         autoreleaseFrequency: .workItem)
     
-//    let depthRecorder = DepthCapture()
+    //    let depthRecorder = DepthCapture()
     
     private override init() {
         super.init()
@@ -76,23 +51,24 @@ extension FrameManager: AVCaptureDataOutputSynchronizerDelegate {
             return
         }
         
-        // https://www.kodeco.com/8246240-image-depth-maps-tutorial-for-ios-getting-started#toc-anchor-002
-//        if depthData.depthDataType != kCVPixelFormatType_DisparityFloat32 {
-//          depthData = depthData.converting(
-//            toDepthDataType: kCVPixelFormatType_DisparityFloat32
-//          )
-//        }
-        
         guard let videoSampleBuffer = syncedVideoData.sampleBuffer.imageBuffer else { return }
-        let videoImage = CIImage(cvImageBuffer: videoSampleBuffer)
+        var depthData = syncedDepthData.depthData
         
-        let depthPixelBuffer = syncedDepthData.depthData.applyingExifOrientation(.right).depthDataMap
-        let depthMap = CIImage(cvPixelBuffer: depthPixelBuffer)
+        if depthData.depthDataType != kCVPixelFormatType_DepthFloat32 {
+            depthData = depthData.converting(toDepthDataType: kCVPixelFormatType_DepthFloat32)
+        }
+        
+        let depthPixelBuffer = depthData.applyingExifOrientation(.right).depthDataMap
+        
+        print("Raw: \(depthPixelBuffer.depthAt(x: 150, y: 150))")
+        print("depth W: \(CVPixelBufferGetWidth(depthPixelBuffer))")
+        print("depth H: \(CVPixelBufferGetHeight(depthPixelBuffer))")
+        print("video W: \(CVPixelBufferGetWidth(videoSampleBuffer))")
+        print("video H: \(CVPixelBufferGetHeight(videoSampleBuffer))")
         
         DispatchQueue.main.async { [weak self] in
-            self?.currentDataWrapper = RGBDDataWrapper(currentDepthCIImage: depthMap, currentVideoCIImage: videoImage)
-            self?.currentDepthCIImage = depthMap
-            self?.currentVideoCIImage = videoImage
+            self?.currentDataWrapper = RGBDDataWrapper(currentDepthPixelBuffer: depthPixelBuffer, currentVideoPixelBuffer: videoSampleBuffer)
+            
         }
         
     }
