@@ -22,6 +22,7 @@
 		8C181BA3290A05BD000396CD /* ToggleButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C181B9B290A05BD000396CD /* ToggleButton.swift */; };
 		8C28EE6B292C1E1F00257F37 /* RecordSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C28EE6A292C1E1F00257F37 /* RecordSession.swift */; };
 		8C9FE64A290A43050097BA09 /* DepthCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C9FE649290A43050097BA09 /* DepthCapture.swift */; };
+		8CC378D9293D1BE5007F017C /* RawDepthRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CC378D8293D1BE5007F017C /* RawDepthRecorder.swift */; };
 		8CE611342925FE8C00395F27 /* BuildVideo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CE611332925FE8B00395F27 /* BuildVideo.swift */; };
 		8CE611362926BBB500395F27 /* DataRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CE611352926BBB400395F27 /* DataRecorder.swift */; };
 		8CE61139292803C800395F27 /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CE61138292803C800395F27 /* Extensions.swift */; };
@@ -46,6 +47,7 @@
 		8C28EE6A292C1E1F00257F37 /* RecordSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordSession.swift; sourceTree = "<group>"; };
 		8C45B85129178A950086959C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		8C9FE649290A43050097BA09 /* DepthCapture.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DepthCapture.swift; sourceTree = "<group>"; };
+		8CC378D8293D1BE5007F017C /* RawDepthRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RawDepthRecorder.swift; sourceTree = "<group>"; };
 		8CE611332925FE8B00395F27 /* BuildVideo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildVideo.swift; sourceTree = "<group>"; };
 		8CE611352926BBB400395F27 /* DataRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataRecorder.swift; sourceTree = "<group>"; };
 		8CE61138292803C800395F27 /* Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Extensions.swift; sourceTree = "<group>"; };
@@ -131,6 +133,7 @@
 			isa = PBXGroup;
 			children = (
 				8CE611352926BBB400395F27 /* DataRecorder.swift */,
+				8CC378D8293D1BE5007F017C /* RawDepthRecorder.swift */,
 				8CE61138292803C800395F27 /* Extensions.swift */,
 				8C28EE6A292C1E1F00257F37 /* RecordSession.swift */,
 			);
@@ -221,6 +224,7 @@
 				8CE61139292803C800395F27 /* Extensions.swift in Sources */,
 				8C181BA2290A05BD000396CD /* FrameView.swift in Sources */,
 				8C181BA0290A05BD000396CD /* ErrorView.swift in Sources */,
+				8CC378D9293D1BE5007F017C /* RawDepthRecorder.swift in Sources */,
 				8C181B92290A04C8000396CD /* CameraError.swift in Sources */,
 				8CE611362926BBB500395F27 /* DataRecorder.swift in Sources */,
 			);

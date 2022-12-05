@@ -14,8 +14,9 @@ struct RecordSession {
     
     func getCurrentTimestampString() -> String {
         let dateFromatter = DateFormatter()
-        dateFromatter.dateStyle = .medium
-        dateFromatter.timeStyle = .full
+        dateFromatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+//        dateFromatter.dateStyle = .short
+//        dateFromatter.timeStyle = .medium
         return dateFromatter.string(from: Date())
     }
     

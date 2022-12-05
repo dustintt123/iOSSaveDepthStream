@@ -19,7 +19,7 @@ class FrameManager: NSObject, ObservableObject {
     @Published var currentDataWrapper: RGBDDataWrapper?
     @Published var currentDepthCIImage: CIImage?
     @Published var currentVideoCIImage: CIImage?
-    
+        
     let videoOutputQueue = DispatchQueue(
         label: "com.raywenderlich.VideoOutputQ",
         qos: .userInitiated,
@@ -36,6 +36,7 @@ class FrameManager: NSObject, ObservableObject {
 }
 
 extension FrameManager: AVCaptureDataOutputSynchronizerDelegate {
+    
     func dataOutputSynchronizer(_ synchronizer: AVCaptureDataOutputSynchronizer, didOutput synchronizedDataCollection: AVCaptureSynchronizedDataCollection) {
         
         guard let videoOutput = synchronizer.dataOutputs.first, let depthOutput = synchronizer.dataOutputs.last else { return }
@@ -54,21 +55,32 @@ extension FrameManager: AVCaptureDataOutputSynchronizerDelegate {
         guard let videoSampleBuffer = syncedVideoData.sampleBuffer.imageBuffer else { return }
         var depthData = syncedDepthData.depthData
         
-        if depthData.depthDataType != kCVPixelFormatType_DepthFloat32 {
-            depthData = depthData.converting(toDepthDataType: kCVPixelFormatType_DepthFloat32)
+        if depthData.depthDataType != kCVPixelFormatType_DepthFloat16 {
+            depthData = depthData.converting(toDepthDataType: kCVPixelFormatType_DepthFloat16)
         }
         
         let depthPixelBuffer = depthData.applyingExifOrientation(.right).depthDataMap
         
-        print("Raw: \(depthPixelBuffer.depthAt(x: 150, y: 150))")
-        print("depth W: \(CVPixelBufferGetWidth(depthPixelBuffer))")
-        print("depth H: \(CVPixelBufferGetHeight(depthPixelBuffer))")
-        print("video W: \(CVPixelBufferGetWidth(videoSampleBuffer))")
-        print("video H: \(CVPixelBufferGetHeight(videoSampleBuffer))")
+//        if !printOnce {
+//            print("list height: \(depthData.depthDataMap.getRawDepths().count)")
+//            print("list width: \(depthData.depthDataMap.getRawDepths()[0].count)")
+//            print("depth W: \(CVPixelBufferGetWidth(depthData.depthDataMap))")
+//            print("depth H: \(CVPixelBufferGetHeight(depthData.depthDataMap))")
+//            print("video W: \(CVPixelBufferGetWidth(videoSampleBuffer))")
+//            print("video H: \(CVPixelBufferGetHeight(videoSampleBuffer))")
+//            print("rotated depth W: \(CVPixelBufferGetWidth(depthPixelBuffer))")
+//            print("rotated depth H: \(CVPixelBufferGetHeight(depthPixelBuffer))")
+//            printOnce = true
+//        }
+        
+//        print("Raw: \(depthPixelBuffer.getRawDepthAt(x: 150, y: 150))")
+        
+//        print("video W: \(CVPixelBufferGetWidth(videoSampleBuffer))")
+//        print("video H: \(CVPixelBufferGetHeight(videoSampleBuffer))")
+        
         
         DispatchQueue.main.async { [weak self] in
             self?.currentDataWrapper = RGBDDataWrapper(currentDepthPixelBuffer: depthPixelBuffer, currentVideoPixelBuffer: videoSampleBuffer)
-            
         }
         
     }

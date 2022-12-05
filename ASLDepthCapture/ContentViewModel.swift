@@ -11,29 +11,28 @@ class ContentViewModel: ObservableObject {
     @Published var error: Error?
     @Published var frame: CGImage?
     
+    private let context = CIContext()
+    
     var isRecoding = false {
         didSet {
             if isRecoding {
                 RecordSession.current.newSession()
                 DataRecorder.sharedRgbRecorder.startRecording()
                 DataRecorder.sharedDepthRecorder.startRecording()
-                DataRecorder.sharedRawDepthRecorder.startRecording()
+                RawDepthRecorder.shared.startRecording()
             } else {
                 DataRecorder.sharedRgbRecorder.finishRecording { url in
-//                    print(url)
                 }
-                DataRecorder.sharedDepthRecorder.finishRecording(success: { url in
-                    
-                })
-                DataRecorder.sharedRawDepthRecorder.finishRecording { url in
-                    
+                DataRecorder.sharedDepthRecorder.finishRecording { url in
+                }
+                RawDepthRecorder.shared.finishRecording { url in
                 }
                 RecordSession.current.endSession()
             }
         }
     }
-        
-    private let context = CIContext()
+    
+    let writingQueue = DispatchQueue(label: "", qos: .userInitiated)
     
     init() {
         setupSubscriptions()
@@ -52,16 +51,18 @@ class ContentViewModel: ObservableObject {
                 
                 guard let depthPixelBuffer = dataWrapper?.currentDepthPixelBuffer else { return nil }
                 guard let videoPixelBuffer = dataWrapper?.currentVideoPixelBuffer else { return nil }
-                
+
                 let depthCIImage = CIImage(cvPixelBuffer: depthPixelBuffer)
                 let videoCIImage = CIImage(cvImageBuffer: videoPixelBuffer)
                 guard let depthCGImage = self.context.createCGImage(depthCIImage, from: depthCIImage.extent) else { return nil }
                 guard let videoCGImage = self.context.createCGImage(videoCIImage, from: videoCIImage.extent) else { return nil }
                 
-                if DataRecorder.sharedRgbRecorder.isReadyForWriting, DataRecorder.sharedDepthRecorder.isReadyForWriting {
-                    let _ = DataRecorder.sharedRgbRecorder.writeImageToVideo(ciImage: videoCIImage, cgImage: videoCGImage)
-                    let _ = DataRecorder.sharedDepthRecorder.writeImageToVideo(ciImage: depthCIImage, cgImage: depthCGImage)
-                    let _ = DataRecorder.sharedRawDepthRecorder.writeRawDepthToFile(pixelBuffer: depthPixelBuffer)
+                self.writingQueue.async {
+                    if DataRecorder.sharedRgbRecorder.isReadyForWriting, DataRecorder.sharedDepthRecorder.isReadyForWriting, RawDepthRecorder.shared.isReadyForWriting {
+                        let _ = DataRecorder.sharedRgbRecorder.writeImageToVideo(ciImage: videoCIImage, cgImage: videoCGImage)
+                        let _ = DataRecorder.sharedDepthRecorder.writeImageToVideo(ciImage: depthCIImage, cgImage: depthCGImage)
+                        let _ = RawDepthRecorder.shared.addRawDepth(pixelBuffer: depthPixelBuffer)
+                    }
                 }
                 
                 return videoCGImage // Preview videoCGImage
@@ -69,22 +70,5 @@ class ContentViewModel: ObservableObject {
             }
             .assign(to: &$frame)
     }
-//
-//    func startRecording() {
-//        do {
-//            try DataRecorder.shared.startRecording()
-//        } catch {
-//
-//        }
-//    }
-//
-//    func stopRecording() {
-//        do {
-//            try DataRecorder.shared.finishRecording { fileURL in
-////                print(fileURL)
-//            }
-//        } catch {
-//
-//        }
-//    }
+
 }

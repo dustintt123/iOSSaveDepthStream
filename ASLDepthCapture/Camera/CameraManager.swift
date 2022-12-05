@@ -137,8 +137,8 @@ class CameraManager: ObservableObject {
         // Search for highest resolution with half-point depth values
         let depthFormats = camera.activeFormat.supportedDepthDataFormats
         let filtered = depthFormats.filter({
-//            CMFormatDescriptionGetMediaSubType($0.formatDescription) == kCVPixelFormatType_DepthFloat16
-            CMFormatDescriptionGetMediaSubType($0.formatDescription) == kCVPixelFormatType_DepthFloat32
+            CMFormatDescriptionGetMediaSubType($0.formatDescription) == kCVPixelFormatType_DepthFloat16
+//            CMFormatDescriptionGetMediaSubType($0.formatDescription) == kCVPixelFormatType_DepthFloat32
         })
         let selectedFormat = filtered.max(by: {
             first, second in CMVideoFormatDescriptionGetDimensions(first.formatDescription).width < CMVideoFormatDescriptionGetDimensions(second.formatDescription).width

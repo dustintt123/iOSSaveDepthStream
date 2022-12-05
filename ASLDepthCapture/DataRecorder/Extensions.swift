@@ -6,17 +6,58 @@
 //
 
 import CoreVideo
+import Foundation
 
 extension CVPixelBuffer {
 
-    var pointer: UnsafeMutablePointer<Float32> {
+    var pointer: UnsafeMutablePointer<Float16> {
         CVPixelBufferLockBaseAddress(self, .readOnly)
-        return unsafeBitCast(CVPixelBufferGetBaseAddress(self), to: UnsafeMutablePointer<Float32>.self)
+        return unsafeBitCast(CVPixelBufferGetBaseAddress(self), to: UnsafeMutablePointer<Float16>.self)
     }
     
-    func depthAt(x: Int, y: Int) -> Float32 {
+    var data: Data {
+        return Data(bytes: self.pointer, count: self.size * 2)
+    }
+    
+    func getRawDepthAt(x: Int, y: Int) -> Float16 {
         return pointer[y * self.width + x]
     }
+    
+    func getRawDepths(removeNaN: Bool = true) -> [[NSNumber]] {
+        let ptr = self.pointer
+        let width = self.width
+        var matrix = [[NSNumber]]()
+        for y in 0..<self.width {
+            var row = [NSNumber]()
+            for x in 0..<self.height {
+                var value = ptr[y * width + x]
+                if value.isNaN || value.isSignalingNaN {
+                    value = Float16(-1)
+                }
+                row.append(NSNumber(floatLiteral: Double(value)))
+            }
+            matrix.append(row)
+        }
+        return matrix
+    }
+//
+//    func getRawDepths(removeNaN: Bool = true) -> [[Float16]] {
+//        let ptr = self.pointer
+//        let width = self.width
+//        var matrix = [[Float16]]()
+//        for y in 0..<self.width {
+//            var row = [Float16]()
+//            for x in 0..<self.height {
+//                var value = ptr[y * width + x]
+//                if value.isNaN || value.isSignalingNaN {
+//                    value = Float16(-1)
+//                }
+//                row.append(value)
+//            }
+//            matrix.append(row)
+//        }
+//        return matrix
+//    }
     
     var width: Int {
         CVPixelBufferGetWidth(self)
